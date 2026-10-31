@@ -2,15 +2,14 @@
 
 A compiler for Simply Typed Lambda Calculus, written in C++20, targeting
 LLVM. It type-checks with full Hindley-Milner inference (no annotations
-anywhere — the compiler figures out every type on its own), optimizes
-closures at the LLVM IR level, and can either emit IR or JIT-execute your
+anywhere: the compiler figures out every type on its own), optimizes
+closures at the LLVM IR level, and can either emit IR or JIT-execute the
 program in-process.
 
-This started as a learning project to go deep on compiler construction —
-lexing through code generation — and ended up somewhere more interesting:
-a real type inference engine, a closure optimization pass pair with a
-measured performance win, and an execution path that sidesteps a genuine
-limitation of how Unix processes report results.
+This started as a learning project to go deep on compiler construction,
+lexing through code generation and ended up somewhere more interesting:
+a real type inference engine, a closure optimization pass paired with a
+measured performance win.
 
 ```
 let rec fact = \n. if n == 0 then 1 else n * fact (n - 1) in fact 5
@@ -31,9 +30,8 @@ not declared.
   because each use of `id` gets its own fresh type variables. `let rec`
   is supported too, though recursive functions are necessarily
   monomorphic within their own body (a function can't call itself at two
-  different types — that's a known, correct boundary of plain HM, not a
-  bug).
-- **AST-level beta reduction** with capture-avoiding substitution — the
+  different types — that's a known, correct boundary of plain HM).
+- **AST-level beta reduction** with capture-avoiding substitution, the
   classic case where naive substitution silently produces the wrong
   answer is handled correctly, with alpha-renaming when a name collision
   would otherwise occur.
@@ -51,8 +49,7 @@ not declared.
   function that created them — and a second pass that promotes those
   from heap (`malloc`) to stack (`alloca`). Measured speedup: **1.88x**,
   from a controlled benchmark (5 interleaved trials, 200K runs each,
-  correctness checked before timing). Full writeup in
-  [`ESCAPE_ANALYSIS.md`](./ESCAPE_ANALYSIS.md).
+  correctness checked before timing).
 - **In-process JIT execution** via LLVM's ORC JIT. Compiled machine code
   is called directly through a native function pointer, rather than run
   as a subprocess — which, as a side effect, also means results aren't
@@ -78,14 +75,14 @@ Run a file:
 
 ```bash
 echo 'let rec fact = \n. if n == 0 then 1 else n * fact (n - 1) in fact 6' > f.stlc
-./stlc f.stlc
+./lambdac f.stlc
 # 720
 ```
 
 Or drop into the REPL:
 
 ```
-$ ./stlc --repl
+$ ./lambdac --repl
 stlc> let x = 5 in x + 1
 6 : Int
 stlc> \x. x
@@ -119,7 +116,7 @@ Primary    ::= Identifier | Integer | "true" | "false" | "(" Expr ")"
 `if`/`then`/`else` is real grammar, not the Church-encoded function
 you'll see in some STLC treatments. That's deliberate: this language is
 *strict* (arguments are evaluated eagerly), and a Church-encoded `if`
-is just an ordinary function call — which would evaluate both branches
+is just an ordinary function call which would evaluate both branches
 unconditionally, including, for a recursive function, the branch that
 recurses, regardless of whether the base case was hit. Real `if`
 compiles to an actual conditional branch in LLVM IR, so only the taken
@@ -129,7 +126,7 @@ Types are never written down. `Int`, `Bool`, and function types are all
 inferred:
 
 ```
-$ ./stlc occurs.stlc      # contents: \x. x x
+$ ./lambdac occurs.stlc      # contents: \x. x x
 occurs.stlc:1:5: type error: Occurs check failed: type variable a
 occurs in a -> b -- infinite type
 ```
@@ -167,16 +164,9 @@ LLVM IR (optimized)
 a number
 ```
 
-Full stage-by-stage walkthrough, with real traced output at every step
-(not hand-derived — everything in there was produced by actually
-running the compiler), lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
-
 ---
 
 ## On that exit code thing
-
-Worth explaining, since it sounds like a strange problem to go out of
-your way to solve.
 
 Unix processes report exactly one thing back to whoever started them
 when they finish: an exit code, and that exit code is hard-capped at
@@ -200,7 +190,7 @@ on traditional `$?`-based scripting, but the real value is always what
 gets printed:
 
 ```
-$ ./stlc f.stlc
+$ ./lambdac f.stlc
 720
 $ echo $?
 208
@@ -208,10 +198,7 @@ $ echo $?
 
 This isn't the main reason the in-process JIT path is worth having —
 the bigger win is just not paying subprocess-spawn overhead (`fork`,
-`exec`, a fresh address space, dynamic symbol resolution) every time you
-want to run compiled code, which matters a lot for something like the
-REPL. The exit code behavior is a real, correctly-handled detail that
-falls out of that choice, not the reason for it.
+`exec`, a fresh address space, dynamic symbol resolution).
 
 ---
 
@@ -259,13 +246,10 @@ of tests.
 
 ## Known limitations
 
-Worth stating plainly rather than discovering by surprise:
-
 - **Recursive functions are monomorphic within their own body.** A
   function can't call itself at two different types in the same
   definition — this is a correct limitation of plain Hindley-Milner
-  (polymorphic recursion is undecidable to infer in general), not
-  something left unfinished.
+  (polymorphic recursion is undecidable to infer in general).
 - **No loop construct**, and STLC itself has no general recursion —
   `let rec` here is a deliberate, pragmatic extension on top of the
   classical language, added specifically so recursive functions like
@@ -294,6 +278,6 @@ benchmarks, mattered more than breadth:
   doesn't depend on anything changing between calls could be allocated
   once rather than repeatedly.
 
-None of these have an LLVM-level equivalent that applies here — they all
+None of these have an LLVM-level equivalent that applies here, they all
 depend on knowing something about closures specifically that's already
 been thrown away by the time generic LLVM passes see the IR.
